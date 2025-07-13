@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>O Caderno de Receitas da Vó</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,700;1,400&family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Caderno Aconchegante -->
+    <!-- Application Structure Plan: A estrutura foi desenhada para transformar um eBook linear em uma experiência de exploração não-linear. Começa com uma introdução emocional (Hero), seguida por um painel de visualização (gráfico de categorias) que serve como um sumário visual e interativo. O núcleo é uma galeria de receitas filtrável por botões e pelo gráfico, permitindo que o usuário navegue pelo conteúdo de acordo com seu interesse. Cada receita abre em um modal para manter a interface principal limpa. A seção de bônus e o rodapé encerram a experiência. Esta estrutura foi escolhida para aumentar o engajamento, facilitar a descoberta e apresentar o conteúdo de forma mais dinâmica e útil do que um simples PDF. -->
+    <!-- Visualization & Content Choices: 1. Receitas: Apresentadas como uma galeria de 'cards' (HTML/Tailwind) para fácil visualização. Interação de clique abre um modal (JS) com detalhes, evitando sobrecarregar a página principal. 2. Categorias de Receitas: Um gráfico de Donut (Chart.js/Canvas) foi criado para resumir visualmente o conteúdo do caderno (ex: 10 salgados, 7 bolos, etc.). Esta visualização oferece um ponto de entrada interativo e moderno para filtrar a galeria. 3. Dicas e Conselho: Apresentados em blocos de texto estilizados como notas antigas para manter a coesão temática e emocional. A escolha de métodos interativos para as receitas e visual para os conselhos equilibra a modernidade da aplicação com a nostalgia do material original. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #FDFBF5;
+            color: #5D4037;
+        }
+        h1, h2, h3, .font-lora {
+            font-family: 'Lora', serif;
+        }
+        .recipe-card {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .recipe-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .modal {
+            transition: opacity 0.3s ease-in-out;
+        }
+        .modal-content {
+            transition: transform 0.3s ease-in-out;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 400px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+            }
+        }
+        .story-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #F59E0B;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+            display: none;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <!-- Modal -->
+    <div id="recipe-modal" class="modal fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50 opacity-0 pointer-events-none">
+        <div id="modal-content" class="modal-content bg-[#FDFBF5] rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto transform scale-95">
+            <div class="p-8 relative">
+                <button id="close-modal" class="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
+                <h2 id="modal-title" class="text-3xl md:text-4xl font-bold text-amber-900 mb-4"></h2>
+                <p id="modal-story" class="text-lg italic text-amber-800 mb-6 border-l-4 border-amber-200 pl-4"></p>
+                
+                <div class="mb-6">
+                    <button id="generate-new-story-btn" class="bg-amber-700 text-white py-2 px-4 rounded-full shadow hover:bg-amber-800 transition flex items-center justify-center mx-auto">
+                        <span class="mr-2">✨ Contar uma nova história da Vó ✨</span>
+                        <div id="story-spinner" class="story-spinner"></div>
+                    </button>
+                    <p id="generated-story-display" class="mt-4 text-center text-gray-700 italic"></p>
+                    <p id="story-error-message" class="mt-4 text-center text-red-500 hidden">Não foi possível recordar uma nova história da Vó neste momento. Tente novamente.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                        <h3 class="text-2xl font-bold text-amber-900 mb-3">Ingredientes</h3>
+                        <ul id="modal-ingredients" class="list-disc list-inside space-y-2 text-gray-700"></ul>
+                    </div>
+                    <div>
+                        <h3 class="text-2xl font-bold text-amber-900 mb-3">Modo de Preparo</h3>
+                        <ol id="modal-preparation" class="list-decimal list-inside space-y-3 text-gray-700"></ol>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="text-center py-16 px-4 bg-amber-50 shadow-md">
+        <h1 class="text-4xl md:text-6xl font-bold text-amber-900 mb-4">O Caderno de Receitas da Vó</h1>
+        <p class="max-w-3xl mx-auto text-lg md:text-xl text-amber-800 font-lora italic">Em memória da minha vó Maria, que me ensinou tudo que sei sobre amor e comida. Esse caderno é tudo que restou da nossa cozinha.</p>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-12">
+        
+        <!-- Dashboard/Intro -->
+        <section id="dashboard" class="text-center mb-12">
+            <h2 class="text-3xl md:text-4xl font-bold text-amber-900 mb-4">Um Tesouro de Sabores</h2>
+            <p class="max-w-3xl mx-auto text-lg text-gray-700 mb-8">
+                Este caderno não é apenas um compilado de ingredientes. É um convite para reviver momentos, sentir cheiros que acalmam a alma e criar novas memórias. Explore as delícias que a Vó Maria nos deixou, divididas por categorias para facilitar sua jornada.
+            </p>
+            <div class="chart-container">
+                <canvas id="recipesChart"></canvas>
+            </div>
+        </section>
+
+        <!-- Filters -->
+        <section id="filters" class="mb-10">
+            <div class="flex flex-wrap justify-center gap-3">
+                <button class="filter-btn bg-amber-800 text-white py-2 px-5 rounded-full shadow hover:bg-amber-900 transition" data-category="Todos">Todos</button>
+                <button class="filter-btn bg-white text-amber-800 py-2 px-5 rounded-full shadow hover:bg-amber-100 transition" data-category="Salgado">Salgados</button>
+                <button class="filter-btn bg-white text-amber-800 py-2 px-5 rounded-full shadow hover:bg-amber-100 transition" data-category="Bolo & Torta">Bolos & Tortas</button>
+                <button class="filter-btn bg-white text-amber-800 py-2 px-5 rounded-full shadow hover:bg-amber-100 transition" data-category="Doce & Sobremesa">Doces & Sobremesas</button>
+            </div>
+        </section>
+
+        <!-- Recipes Grid -->
+        <section id="recipes-gallery">
+            <div id="recipes-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <!-- Recipe cards will be injected here by JavaScript -->
+            </div>
+        </section>
+
+        <!-- Bonus Section -->
+        <section id="bonus" class="mt-20 py-16 bg-amber-50 rounded-lg">
+            <div class="container mx-auto px-4 text-center">
+                <h2 class="text-3xl md:text-4xl font-bold text-amber-900 mb-12">Os Segredos da Vó</h2>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 max-w-6xl mx-auto">
+                    <div class="bg-white p-8 rounded-lg shadow-lg text-left">
+                        <h3 class="text-2xl font-bold text-amber-900 mb-4">Dicas para economizar na cozinha</h3>
+                        <ul class="space-y-3 text-gray-700">
+                            <li><span class="text-amber-800 font-bold">1. Aproveite tudo:</span> Cascas de legumes e talos de verduras podem virar caldos nutritivos.</li>
+                            <li><span class="text-amber-800 font-bold">2. Planeje as refeições:</span> Saber o que vai cozinhar evita desperdício e compras.</li>
+                            <li><span class="text-amber-800 font-bold">3. Compre da estação:</span> Frutas e verduras da época são mais baratas e saborosas.</li>
+                            <li><span class="text-amber-800 font-bold">4. Congele o que sobra:</span> Sopas e molhos podem ser congelados para refeições futuras.</li>
+                             <li><span class="text-amber-800 font-bold">5. Cozinhe em grandes quantidades:</span> Poupa tempo e dinheiro.</li>
+                        </ul>
+                    </div>
+                    <div class="bg-white p-8 rounded-lg shadow-lg text-left flex flex-col justify-center">
+                        <h3 class="text-2xl font-bold text-amber-900 mb-4">Conselho da Vó</h3>
+                        <blockquote class="italic text-gray-700 border-l-4 border-amber-200 pl-4">
+                            "Meu querido(a), a vida é como uma receita. Às vezes, a gente erra a mão, mas o segredo é nunca desistir de tentar. O amor é o tempero principal de tudo, e com ele, qualquer prato, qualquer vida, fica mais saborosa."
+                            <cite class="block not-italic mt-4 font-bold text-amber-800">- Vó Maria</cite>
+                        </blockquote>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="text-center py-10 mt-12 border-t border-amber-200">
+        <p class="text-amber-800 italic">Se esse caderno te tocou, compartilhe com alguém que você ama. <br> A tradição só continua se a gente passa adiante.</p>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const recipes = [
+                { id: 1, title: 'Pão de Queijo da Vó Maria', category: 'Salgado', story: 'Essa receita era o segredo da vó para me tirar da cama nos domingos preguiçosos. O cheiro invadia a casa e era impossível resistir.', ingredients: ['500g de polvilho doce', '250ml de leite', '100ml de óleo', '1 colher de chá de sal', '2 ovos grandes', '250g de queijo minas curado ralado'], preparation: ['Ferva o leite com o óleo e o sal.', 'Despeje a mistura quente sobre o polvilho para escaldar. Deixe esfriar um pouco.', 'Adicione os ovos um a um, sovando bem.', 'Acrescente o queijo e sove até a massa ficar homogênea.', 'Faça bolinhas e coloque em uma assadeira untada.', 'Asse em forno pré-aquecido a 180°C por 25-30 minutos.'] },
+                { id: 2, title: 'Bolo de Fubá Cremoso da Vó', category: 'Bolo & Torta', story: 'Minha vó sempre tinha um pedaço desse bolo guardado para o café da tarde. Era o conforto em forma de fatia.', ingredients: ['3 ovos', '2 xícaras de açúcar', '2 xícaras de leite', '1 xícara de fubá', '1/2 xícaras de farinha de trigo', '3 colheres de sopa de manteiga derretida', '1 colher de sopa de fermento', '1 pitada de erva-doce (opcional)'], preparation: ['Bata ovos, açúcar, leite e manteiga no liquidificador.', 'Adicione o fubá e a farinha e bata novamente.', 'Acrescente o fermento e a erva-doce, misturando delicadamente.', 'Despeje em forma untada e enfarinhada.', 'Asse a 180°C por 40-50 minutos.'] },
+                { id: 3, title: 'Bolo de Cenoura com Cobertura', category: 'Bolo & Torta', story: 'Esse era o bolo das festas de aniversário. A cobertura brilhante era a combinação perfeita para celebrar.', ingredients: ['Bolo: 3 cenouras, 4 ovos, 1 xícara de óleo, 2 xícaras de açúcar, 2 xícaras de farinha, 1 colher de sopa de fermento.', 'Cobertura: 1 xícara de açúcar, 3 colheres de sopa de chocolate em pó, 2 colheres de sopa de manteiga, 1/2 xícara de leite.'], preparation: ['Bolo: Bata cenouras, ovos e óleo no liquidificador. Misture com os ingredientes secos. Asse a 180°C por 35-40 min.', 'Cobertura: Misture tudo em uma panela, ferva até engrossar e despeje sobre o bolo morno.'] },
+                { id: 4, title: 'Brigadeiro Caseiro da Vó', category: 'Doce & Sobremesa', story: 'O brigadeiro da vó era a recompensa depois de um dia de brincadeiras. A gente ria da bagunça que fazíamos na cozinha.', ingredients: ['1 lata de leite condensado', '3 colheres de sopa de chocolate em pó 50% cacau', '1 colher de sopa de manteiga', 'Granulado'], preparation: ['Misture os ingredientes (exceto granulado) em uma panela.', 'Cozinhe em fogo baixo, mexendo sempre, até desgrudar do fundo.', 'Deixe esfriar, enrole e passe no granulado.'] },
+                { id: 5, title: 'Beijinho de Coco da Vó', category: 'Doce & Sobremesa', story: 'Minha vó dizia que o coco trazia um pedacinho do paraíso para a nossa mesa.', ingredients: ['1 lata de leite condensado', '100g de coco ralado', '1 colher de sopa de manteiga', 'Cravos para decorar'], preparation: ['Misture os ingredientes (exceto cravos) em uma panela.', 'Cozinhe em fogo baixo, mexendo sempre, até desgrudar do fundo.', 'Deixe esfriar, enrole, passe no coco ralado e decore com um cravo.'] },
+                { id: 6, title: 'Arroz Doce Cremoso da Vó', category: 'Doce & Sobremesa', story: 'Quando eu estava triste, a vó fazia esse arroz doce. Era um abraço quentinho para a alma.', ingredients: ['1 xícara de arroz', '3 xícaras de água', '1 litro de leite', '1 lata de leite condensado', '1 pau de canela', 'Casca de 1 limão', 'Canela em pó'], preparation: ['Cozinhe o arroz na água com canela e limão até secar.', 'Adicione o leite e o leite condensado.', 'Cozinhe em fogo baixo até ficar cremoso.', 'Sirva polvilhado com canela.'] },
+                { id: 7, title: 'Canjica da Vó (Mungunzá)', category: 'Doce & Sobremesa', story: 'Nas festas juninas, a canjica da vó era a estrela. Era uma festa antes da festa.', ingredients: ['500g de canjica branca', '1 litro de leite', '1 lata de leite condensado', '1 xícara de coco ralado fresco', '1/2 xícara de amendoim torrado e moído'], preparation: ['Deixe a canjica de molho por 8h.', 'Cozinhe na pressão até ficar macia (cerca de 40 min).', 'Transfira para outra panela, adicione os outros ingredientes e cozinhe em fogo baixo até engrossar.'] },
+                { id: 8, title: 'Frango Assado com Batatas', category: 'Salgado', story: 'O cheiro do frango assado era o convite para o almoço de domingo em família.', ingredients: ['1 frango inteiro', '5 batatas médias', '4 dentes de alho', 'Suco de 1 limão', 'Colorau, orégano, sal, pimenta, azeite', 'Alecrim fresco (opcional)'], preparation: ['Tempere o frango e deixe marinar.', 'Coloque o frango sobre as batatas temperadas em uma assadeira.', 'Cubra com papel alumínio e asse a 200°C por 1 hora.', 'Retire o papel e asse por mais 30-40 min para dourar.'] },
+                { id: 9, title: 'Bife à Rolê da Vó', category: 'Salgado', story: 'Esse era o prato que a vó fazia quando queria nos mimar. Cada bife era um presente.', ingredients: ['500g de bife de alcatra', '1 cenoura em tiras', '1/2 pimentão em tiras', '1 cebola picada', '2 dentes de alho', '1 lata de molho de tomate', 'Palitos de dente'], preparation: ['Recheie os bifes com cenoura e pimentão, enrole e prenda com palitos.', 'Doure os bifes na panela de pressão.', 'Refogue cebola e alho, adicione o molho de tomate e água.', 'Cozinhe na pressão por 20 minutos.'] },
+                { id: 10, title: 'Macarrão com Molho Caseiro', category: 'Salgado', story: 'O molho da vó era uma obra de arte, feito com tomates frescos do quintal.', ingredients: ['Molho: 1kg de tomates, 1 cebola, 2 dentes de alho, manjericão, azeite', '500g de macarrão'], preparation: ['Molho: Refogue cebola e alho, adicione os tomates (sem pele e sementes) e temperos. Cozinhe em fogo baixo por 30-40 min.', 'Cozinhe o macarrão e sirva com o molho.'] },
+                { id: 11, title: 'Sopa de Legumes da Vó', category: 'Salgado', story: 'Quando o frio chegava, a vó preparava essa sopa. Era um abraço quente em forma de colher.', ingredients: ['1 cebola', '2 dentes de alho', 'Legumes variados (batata, cenoura, chuchu)', '1/2 xícara de macarrão para sopa', '1 litro de caldo de legumes'], preparation: ['Refogue cebola e alho.', 'Adicione os legumes e o caldo. Cozinhe até ficarem macios.', 'Acrescente o macarrão e cozinhe até ficar al dente.', 'Finalize com cheiro-verde.'] },
+                { id: 12, title: 'Doce de Leite Caseiro da Vó', category: 'Doce & Sobremesa', story: 'O doce de leite da vó era a sobremesa mais esperada, feita na panela de pressão.', ingredients: ['1 lata de leite condensado'], preparation: ['Retire o rótulo da lata.', 'Coloque a lata deitada na panela de pressão, cubra com água.', 'Cozinhe por 40 minutos após pegar pressão.', 'ESPERE ESFRIAR COMPLETAMENTE antes de abrir.'] },
+                { id: 13, title: 'Goiabada Cascão da Vó', category: 'Doce & Sobremesa', story: 'A vó fazia goiabada com as goiabas do quintal. Perfeita para comer com queijo minas.', ingredients: ['1 kg de goiabas maduras', '500g de açúcar', 'Suco de 1/2 limão'], preparation: ['Bata as goiabas (sem sementes) no liquidificador.', 'Leve a polpa ao fogo com açúcar e limão.', 'Cozinhe, mexendo sempre, até desgrudar do fundo da panela.'] },
+                { id: 14, title: 'Ambrosia da Vó', category: 'Doce & Sobremesa', story: 'A ambrosia da vó era um doce de avó de verdade, com aquele aspecto rústico e sabor inconfundível.', ingredients: ['6 ovos', '1 litro de leite', '2 xícaras de açúcar', 'Casca de 1 limão', 'Canela em pau'], preparation: ['Misture leite, açúcar, casca de limão e canela e leve ao fogo.', 'Quando quase ferver, despeje os ovos batidos em fio, mexendo pouco.', 'Cozinhe em fogo baixo por 30-40 min, até formar grumos.'] },
+                { id: 15, title: 'Cuscuz Paulista da Vó', category: 'Salgado', story: 'O cuscuz da vó era um prato completo e cheio de sabor, uma obra de arte na mesa do almoço.', ingredients: ['2 xícaras de farinha de milho flocada', '1 lata de sardinha', '1 lata de molho de tomate', 'Ervilha, milho, palmito', 'Ovos cozidos para decorar'], preparation: ['Refogue os temperos e ingredientes do recheio com o molho.', 'Adicione a farinha de milho aos poucos, mexendo sem parar.', 'Decore uma forma, despeje a massa, aperte bem e desenforme.'] },
+                { id: 16, title: 'Torta de Frango Cremosa', category: 'Bolo & Torta', story: 'Essa torta era a salvação para os lanches da tarde. O cheiro do forno me dava água na boca.', ingredients: ['Massa: 2 xícaras de farinha, 100g de manteiga, 1 ovo, sal.', 'Recheio: 2 xícaras de frango desfiado, 1 cebola, alho, milho, 1 copo de requeijão.'], preparation: ['Massa: Misture os ingredientes, leve à geladeira por 30 min.', 'Recheio: Refogue os temperos, adicione o frango e os outros ingredientes.', 'Monte a torta e asse a 180°C por 30-40 min.'] },
+                { id: 17, title: 'Bolo de Laranja Fofinho', category: 'Bolo & Torta', story: 'O bolo de laranja da vó tinha um cheiro que perfumava a casa inteira, simplicidade que virava poesia.', ingredients: ['3 ovos', '2 xícaras de açúcar', '1 xícara de óleo', '1 laranja inteira (com casca, sem sementes)', '2 xícaras de farinha', '1 colher de sopa de fermento'], preparation: ['Bata no liquidificador os ovos, açúcar, óleo e a laranja.', 'Misture com a farinha e o fermento em uma tigela.', 'Asse em forma untada a 180°C por 35-40 min.'] },
+                { id: 18, title: 'Biscoito de Polvilho da Vó', category: 'Salgado', story: 'Crocantes por fora e macios por dentro, eles derretiam na boca e me levavam de volta à infância.', ingredients: ['500g de polvilho azedo', '250ml de água', '100ml de óleo', '1 colher de chá de sal', '2 ovos'], preparation: ['Ferva água, óleo e sal.', 'Escalde o polvilho com a mistura.', 'Adicione os ovos e sove bem.', 'Modele os biscoitos e asse a 180°C por 20-25 min.'] },
+                { id: 19, title: 'Broa de Milho da Vó', category: 'Bolo & Torta', story: 'A broa de milho da vó era um pedacinho do campo na nossa mesa. Sabor de pura simplicidade e carinho.', ingredients: ['2 xícaras de fubá', '1 xícara de farinha', '1 xícara de açúcar', '1/2 xícara de óleo', '1 xícara de leite', '2 ovos', '1 colher de sopa de fermento'], preparation: ['Misture os ingredientes secos.', 'Bata os líquidos e despeje sobre os secos.', 'Adicione o fermento, despeje na forma e asse a 180°C por 30-40 min.'] },
+                { id: 20, title: 'Quindim da Vó', category: 'Doce & Sobremesa', story: 'O quindim da vó era o raio de sol na mesa de sobremesas. Um deleite para os olhos e o paladar.', ingredients: ['10 gemas peneiradas', '100g de coco ralado fresco', '1 xícara de açúcar', '1 colher de sopa de manteiga derretida'], preparation: ['Misture todos os ingredientes sem bater.', 'Despeje em forminhas untadas com manteiga e açúcar.', 'Asse em banho-maria a 180°C por 30-40 min.', 'Deixe esfriar para desenformar.'] },
+                { id: 21, title: 'Pudim de Leite Condensado', category: 'Doce & Sobremesa', story: 'O pudim da vó era o clássico dos clássicos, a sobremesa que sempre nos fazia pedir bis.', ingredients: ['Calda: 1 xícara de açúcar.', 'Pudim: 1 lata de leite condensado, mesma medida de leite, 3 ovos.'], preparation: ['Faça a calda de caramelo na forma.', 'Bata os ingredientes do pudim no liquidificador.', 'Despeje na forma, cubra com papel alumínio e asse em banho-maria a 180°C por 1h15.'] },
+                { id: 22, title: 'Manjar de Coco da Vó', category: 'Doce & Sobremesa', story: 'O manjar era a sobremesa refrescante dos dias quentes, com calda de ameixa por cima.', ingredients: ['1 litro de leite', '1 lata de leite condensado', '1 xícara de coco ralado', '4 colheres de sopa de amido de milho', 'Calda: 1 xícara de ameixas, 1/2 xícara de açúcar, 1 xícara de água'], preparation: ['Manjar: Dissolva o amido no leite, junte os outros ingredientes e cozinhe até engrossar.', 'Calda: Cozinhe os ingredientes até encorpar.', 'Leve o manjar à geladeira por 4h e sirva com a calda.'] },
+                { id: 23, title: 'Bolinho de Chuva da Vó', category: 'Doce & Sobremesa', story: 'A alegria dos dias chuvosos. A gente comia quentinho, polvilhado com açúcar e canela.', ingredients: ['2 ovos', '1 xícara de leite', '2 xícaras de farinha', '1/2 xícara de açúcar', '1 colher de sopa de fermento', 'Óleo para fritar', 'Açúcar e canela'], preparation: ['Misture os ingredientes da massa.', 'Frite colheradas da massa em óleo quente.', 'Escorra e passe no açúcar com canela.'] },
+                { id: 24, title: 'Curau de Milho Verde da Vó', category: 'Doce & Sobremesa', story: 'O curau da vó era a essência do milho verde, cremoso e doce, com milho fresco da roça.', ingredients: ['6 espigas de milho verde', '1 litro de leite', '1 xícara de açúcar', '1 pitada de sal'], preparation: ['Bata o milho com o leite no liquidificador e peneire.', 'Leve o líquido ao fogo com açúcar e sal, mexendo até engrossar.', 'Despeje em um refratário e polvilhe canela.'] },
+                { id: 25, title: 'Pamonha Doce da Vó', category: 'Doce & Sobremesa', story: 'A pamonha da vó era um ritual. O resultado era essa delícia embalada na própria palha.', ingredients: ['10 espigas de milho verde', '1 xícara de açúcar', '1/2 xícara de leite de coco', '1 pitada de sal', 'Palhas de milho'], preparation: ['Rale ou bata o milho e peneire.', 'Misture com açúcar, leite de coco e sal.', 'Recheie as palhas, amarre e cozinhe em água fervente por 40 min.'] },
+                { id: 26, title: 'Farofa de Banana da Vó', category: 'Salgado', story: 'A farofa de banana era o acompanhamento perfeito para o almoço. Doce e salgada na medida certa.', ingredients: ['3 bananas-da-terra', '2 xícaras de farinha de mandioca', '1 cebola', '3 colheres de sopa de manteiga'], preparation: ['Doure a cebola na manteiga.', 'Adicione as bananas picadas e refogue.', 'Acrescente a farinha aos poucos, mexendo até ficar crocante.'] },
+                { id: 27, title: 'Salada de Maionese da Vó', category: 'Salgado', story: 'Um clássico em qualquer churrasco. Cremosa e cheia de sabor, era a estrela da mesa.', ingredients: ['5 batatas cozidas', '2 cenouras cozidas', 'Ervilha, milho, 1/2 cebola picada', '2 ovos cozidos', '1 xícara de maionese'], preparation: ['Misture todos os ingredientes picados em uma tigela.', 'Adicione a maionese e tempere.', 'Leve à geladeira antes de servir.'] },
+                { id: 28, title: 'Bolo de Milho Cremoso', category: 'Bolo & Torta', story: 'Esse bolo era a prova de que a vó era uma mágica na cozinha. Simples, mas com um sabor incrível.', ingredients: ['1 lata de milho (com água)', '1 lata de leite', '1 lata de açúcar', '1/2 lata de óleo', '1 lata de fubá', '3 ovos', '1 colher de sopa de fermento'], preparation: ['Use a lata de milho como medida.', 'Bata todos os ingredientes no liquidificador, exceto o fermento.', 'Adicione o fermento e misture.', 'Asse a 180°C por 40-50 min.'] },
+                { id: 29, title: 'Feijão Tropeiro da Vó', category: 'Salgado', story: 'O feijão tropeiro que trazia a família para a mesa. Um almoço completo e delicioso.', ingredients: ['2 xícaras de feijão cozido', '200g de bacon', '1 linguiça calabresa', '2 xícaras de farinha de mandioca', '3 ovos cozidos'], preparation: ['Frite o bacon e a linguiça. Reserve.', 'Na mesma gordura, refogue os temperos.', 'Adicione o feijão e a farinha, mexendo bem.', 'Incorpore o bacon, a linguiça e os ovos picados.'] },
+                { id: 30, title: 'Torta de Maçã da Vó', category: 'Bolo & Torta', story: 'Essa era a torta da véspera de Natal. O cheiro no forno significava que a festa estava chegando.', ingredients: ['Massa: 2 xícaras de farinha, 150g de manteiga, 1/2 xícara de açúcar, 1 ovo.', 'Recheio: 4 maçãs fatiadas, 1/2 xícara de açúcar, canela, suco de limão.'], preparation: ['Faça a massa e refrigere por 30 min.', 'Misture os ingredientes do recheio.', 'Forre uma forma com metade da massa, adicione o recheio e cubra com o restante da massa.', 'Asse a 180°C por 40-50 min.'] }
+            ];
+
+            const recipesGrid = document.getElementById('recipes-grid');
+            const filterBtns = document.querySelectorAll('.filter-btn');
+            let chartInstance = null;
+            
+            const categoryCounts = recipes.reduce((acc, recipe) => {
+                acc[recipe.category] = (acc[recipe.category] || 0) + 1;
+                return acc;
+            }, {});
+
+            const renderRecipes = (filteredRecipes) => {
+                recipesGrid.innerHTML = '';
+                filteredRecipes.forEach(recipe => {
+                    const card = document.createElement('div');
+                    card.className = 'recipe-card bg-white rounded-lg shadow-lg overflow-hidden cursor-pointer';
+                    card.innerHTML = `
+                        <div class="p-6">
+                            <h3 class="text-xl font-bold text-amber-900 mb-2">${recipe.title}</h3>
+                            <p class="text-gray-600 italic">"${recipe.story}"</p>
+                        </div>
+                    `;
+                    card.addEventListener('click', () => showModal(recipe));
+                    recipesGrid.appendChild(card);
+                });
+            };
+
+            const showModal = (recipe) => {
+                document.getElementById('modal-title').innerText = recipe.title;
+                document.getElementById('modal-story').innerText = recipe.story;
+                
+                const ingredientsList = document.getElementById('modal-ingredients');
+                ingredientsList.innerHTML = '';
+                recipe.ingredients.forEach(item => {
+                    const li = document.createElement('li');
+                    li.innerText = item;
+                    ingredientsList.appendChild(li);
+                });
+
+                const preparationList = document.getElementById('modal-preparation');
+                preparationList.innerHTML = '';
+                recipe.preparation.forEach(item => {
+                    const li = document.createElement('li');
+                    li.innerText = item;
+                    preparationList.appendChild(li);
+                });
+
+                // Clear previously generated story and errors
+                document.getElementById('generated-story-display').innerText = '';
+                document.getElementById('story-error-message').classList.add('hidden');
+
+                // Store current recipe for story generation
+                document.getElementById('generate-new-story-btn').dataset.recipeTitle = recipe.title;
+                document.getElementById('generate-new-story-btn').dataset.recipeStory = recipe.story;
+
+
+                const modal = document.getElementById('recipe-modal');
+                modal.classList.remove('opacity-0', 'pointer-events-none');
+                document.getElementById('modal-content').classList.remove('scale-95');
+            };
+
+            const closeModal = () => {
+                const modal = document.getElementById('recipe-modal');
+                modal.classList.add('opacity-0', 'pointer-events-none');
+                document.getElementById('modal-content').classList.add('scale-95');
+            };
+
+            const handleFilterClick = (category) => {
+                const filtered = category === 'Todos' ? recipes : recipes.filter(r => r.category === category);
+                renderRecipes(filtered);
+
+                filterBtns.forEach(btn => {
+                    if (btn.dataset.category === category) {
+                        btn.classList.remove('bg-white', 'text-amber-800', 'hover:bg-amber-100');
+                        btn.classList.add('bg-amber-800', 'text-white', 'hover:bg-amber-900');
+                    } else {
+                        btn.classList.remove('bg-amber-800', 'text-white', 'hover:bg-amber-900');
+                        btn.classList.add('bg-white', 'text-amber-800', 'hover:bg-amber-100');
+                    }
+                });
+            };
+
+            const setupChart = () => {
+                const ctx = document.getElementById('recipesChart').getContext('2d');
+                const data = {
+                    labels: Object.keys(categoryCounts),
+                    datasets: [{
+                        label: 'Nº de Receitas',
+                        data: Object.values(categoryCounts),
+                        backgroundColor: [
+                            '#D97706', // amber-600
+                            '#F59E0B', // amber-500
+                            '#FBBF24'  // amber-400
+                        ],
+                        borderColor: '#FDFBF5',
+                        borderWidth: 4,
+                        hoverOffset: 8
+                    }]
+                };
+
+                chartInstance = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: data,
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                                labels: {
+                                    font: {
+                                        family: "'Poppins', sans-serif",
+                                        size: 14
+                                    }
+                                }
+                            }
+                        },
+                        onClick: (event, elements) => {
+                            if (elements.length > 0) {
+                                const chartElement = elements[0];
+                                const category = data.labels[chartElement.index];
+                                handleFilterClick(category);
+                            }
+                        }
+                    }
+                });
+            };
+
+            const generateStory = async () => {
+                const generateStoryBtn = document.getElementById('generate-new-story-btn');
+                const storySpinner = document.getElementById('story-spinner');
+                const generatedStoryDisplay = document.getElementById('generated-story-display');
+                const storyErrorMessage = document.getElementById('story-error-message');
+
+                const recipeTitle = generateStoryBtn.dataset.recipeTitle;
+                const recipeStory = generateStoryBtn.dataset.recipeStory;
+
+                generatedStoryDisplay.innerText = 'A Vó está a recordar uma nova história...';
+                storyErrorMessage.classList.add('hidden');
+                storySpinner.style.display = 'block';
+                generateStoryBtn.disabled = true;
+
+                try {
+                    const prompt = `Generate a very short, emotional, and nostalgic memory or story (2-3 sentences max) from the perspective of 'Vó Maria' about the following recipe: '${recipeTitle}'. The story should evoke feelings of warmth, family, and tradition. Do not simply rephrase the existing story. Make it new and heartfelt. Example style: 'Lembro-me de quando o Joãozinho, meu neto, vinha correndo para a cozinha só para ver o bolo de cenoura sair do forno. Os olhinhos dele brilhavam mais que a cobertura de chocolate!'`;
+                    
+                    let chatHistory = [];
+                    chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+                    const payload = { contents: chatHistory };
+                    const apiKey = ""; 
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    const result = await response.json();
+
+                    if (result.candidates && result.candidates.length > 0 &&
+                        result.candidates[0].content && result.candidates[0].content.parts &&
+                        result.candidates[0].content.parts.length > 0) {
+                        const text = result.candidates[0].content.parts[0].text;
+                        generatedStoryDisplay.innerText = text;
+                    } else {
+                        storyErrorMessage.classList.remove('hidden');
+                        generatedStoryDisplay.innerText = '';
+                    }
+                } catch (error) {
+                    console.error('Erro ao gerar história:', error);
+                    storyErrorMessage.classList.remove('hidden');
+                    generatedStoryDisplay.innerText = '';
+                } finally {
+                    storySpinner.style.display = 'none';
+                    generateStoryBtn.disabled = false;
+                }
+            };
+
+            filterBtns.forEach(btn => {
+                btn.addEventListener('click', () => handleFilterClick(btn.dataset.category));
+            });
+
+            document.getElementById('close-modal').addEventListener('click', closeModal);
+            document.getElementById('recipe-modal').addEventListener('click', (e) => {
+                if (e.target.id === 'recipe-modal') {
+                    closeModal();
+                }
+            });
+
+            document.getElementById('generate-new-story-btn').addEventListener('click', generateStory);
+
+            renderRecipes(recipes);
+            setupChart();
+        });
+    </script>
+</body>
+</html>
